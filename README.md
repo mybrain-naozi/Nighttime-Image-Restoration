@@ -6,6 +6,97 @@
 
 ![夜间监控复原对比示例](examples/results/comparison/190001_comparison.png)
 
+## 先下载数据集
+
+运行本项目之前，需要先下载 LLVIP 数据集。本仓库不包含完整 LLVIP 原始数据集，只保留少量示例结果图，避免仓库体积过大，也避免重新分发第三方数据集。
+
+推荐优先查看官方链接：
+
+- LLVIP 官方项目主页：<https://bupt-ai-cz.github.io/LLVIP/>
+- LLVIP 官方 GitHub：<https://github.com/bupt-ai-cz/LLVIP>
+- LLVIP 数据集下载说明：<https://github.com/bupt-ai-cz/LLVIP/blob/main/download_dataset.md>
+- LLVIP 论文 arXiv：<https://arxiv.org/abs/2108.10831>
+- LLVIP 官方许可说明：<https://github.com/bupt-ai-cz/LLVIP/blob/main/Term%20of%20Use%20and%20License.md>
+- LLVIP Kaggle 相关页面：<https://www.kaggle.com/c/find-person-in-the-dark>
+- Papers with Code 页面：<https://paperswithcode.com/sota/pedestrian-detection-on-llvip>
+
+下载后请把可见光图像放到下面的位置：
+
+```text
+项目根目录/
+└── LLVIP/
+    └── LLVIP/
+        └── visible/
+            ├── 190001.jpg
+            ├── 190002.jpg
+            └── ...
+```
+
+默认路径已经写在 `src/path_config.py` 中：
+
+```python
+LLVIP_VISIBLE_DIR = PROJECT_ROOT / "LLVIP" / "LLVIP" / "visible"
+```
+
+如果你的数据集放在其他位置，只需要修改 `src/path_config.py` 中这一行即可。其余代码不需要改。
+
+## 关于 LLVIP 数据集
+
+LLVIP 的全称是 **LLVIP: A Visible-infrared Paired Dataset for Low-light Vision**，是一个面向低照度视觉任务的可见光-红外成对数据集。官方 README 中说明，当前发布版本包含 30976 张图像，并提供可见光图像、红外图像以及行人检测相关标注，常用于低照度目标检测、可见光-红外图像融合和夜间场景感知等研究。
+
+本项目只使用 LLVIP 中的 `visible` 可见光夜间监控图像。选择这个数据集的原因是：它不是普通风景图片，而是更接近真实监控视角，画面中包含道路、车辆、行人、灯光、阴影和夜间低照度环境。这些特点与“夜间监控图像复原”主题更匹配，也方便在论文或答辩中解释复原后的实际意义。
+
+在本项目中，LLVIP 可见光图像作为“原图/标准图”。程序会在原图基础上构造运动模糊和散焦模糊退化图，再分别使用传统方法和改进方法进行复原。因此实验逻辑是：
+
+```text
+LLVIP 原始夜间监控图
+        ↓
+构造运动模糊 / 散焦模糊退化图
+        ↓
+传统方法复原 / 改进方法复原
+        ↓
+与原始监控图计算 PSNR、SSIM、RMSE
+```
+
+## 数据集许可、引用与致谢
+
+本项目不是 LLVIP 官方仓库，也不声称 LLVIP 数据集由本项目创建。LLVIP 官方许可说明中明确表示，数据集可用于学术研究、教学、科学出版和个人实验等非商业用途；使用时需要引用 LLVIP 数据集或其论文；不得将数据集或基于该数据集形成的派生数据用于商业销售、授权或其他商业获利目的。
+
+本仓库遵循以下处理原则：
+
+- 不上传完整 LLVIP 原始数据集。
+- 示例结果仅用于展示夜间监控图像模糊复原流程。
+- 若权利方或数据集维护者要求删除相关示例图，本仓库将及时移除。
+- 使用者若下载并使用 LLVIP，应自行确认其用途符合 LLVIP 官方许可。
+- 若后续用于论文、报告、答辩或公开展示，请明确说明图像数据来源于 LLVIP，并引用其原始论文。
+
+推荐引用格式：
+
+```bibtex
+@inproceedings{jia2021llvip,
+  title={LLVIP: A visible-infrared paired dataset for low-light vision},
+  author={Jia, Xinyu and Zhu, Chuang and Li, Minzhen and Tang, Wenqi and Zhou, Wenli},
+  booktitle={Proceedings of the IEEE/CVF International Conference on Computer Vision},
+  pages={3496--3504},
+  year={2021}
+}
+```
+
+也可以引用 arXiv 版本：
+
+```bibtex
+@misc{llvip_arxiv_2021,
+  title={LLVIP: A Visible-infrared Paired Dataset for Low-light Vision},
+  author={Jia, Xinyu and Zhu, Chuang and Li, Minzhen and Tang, Wenqi and Liu, Shengjie and Zhou, Wenli},
+  year={2021},
+  eprint={2108.10831},
+  archivePrefix={arXiv},
+  primaryClass={cs.CV},
+  doi={10.48550/arXiv.2108.10831},
+  url={https://arxiv.org/abs/2108.10831}
+}
+```
+
 ## 项目特点
 
 - 使用原始 LLVIP 夜间监控图像作为标准图，不再把增强后的图像当作原图。
@@ -45,85 +136,6 @@
 python -m venv .venv
 .\.venv\Scripts\activate
 pip install -r requirements.txt
-```
-
-## 数据集放置方式
-
-本仓库不包含 LLVIP 原始数据集。请自行下载 LLVIP 数据集，并把可见光图像放到下面的位置：
-
-```text
-项目根目录/
-└── LLVIP/
-    └── LLVIP/
-        └── visible/
-            ├── 190001.jpg
-            ├── 190002.jpg
-            └── ...
-```
-
-默认路径已经写在 `src/path_config.py` 中：
-
-```python
-LLVIP_VISIBLE_DIR = PROJECT_ROOT / "LLVIP" / "LLVIP" / "visible"
-```
-
-如果数据集放在其他位置，只需要修改这一行即可。
-
-## 数据集来源、链接与致谢
-
-本项目使用的夜间监控图像来源于 LLVIP 数据集。本仓库不是 LLVIP 官方仓库，也不重新分发完整 LLVIP 原始数据集。使用者需要按照 LLVIP 官方说明自行下载，并遵守其许可条款。
-
-推荐优先查看官方链接：
-
-- LLVIP 官方项目主页：<https://bupt-ai-cz.github.io/LLVIP/>
-- LLVIP 官方 GitHub：<https://github.com/bupt-ai-cz/LLVIP>
-- LLVIP 数据集下载说明：<https://github.com/bupt-ai-cz/LLVIP/blob/main/download_dataset.md>
-- LLVIP 论文 arXiv：<https://arxiv.org/abs/2108.10831>
-- LLVIP 官方许可说明：<https://github.com/bupt-ai-cz/LLVIP/blob/main/Term%20of%20Use%20and%20License.md>
-- LLVIP Kaggle 相关页面：<https://www.kaggle.com/c/find-person-in-the-dark>
-- Papers with Code 页面：<https://paperswithcode.com/sota/pedestrian-detection-on-llvip>
-
-本项目的实验图片、退化图、复原图和对比图均用于课程设计、毕业设计和学术研究展示。若后续用于论文、报告、答辩或公开展示，请在文中明确说明图像数据来源于 LLVIP，并引用其原始论文。
-
-## 数据集许可与使用说明
-
-根据 LLVIP 官方许可说明，LLVIP Dataset 可用于学术研究、教学、科学出版和个人实验等非商业用途。使用时需要引用 LLVIP 数据集或其论文；不得将数据集或基于该数据集形成的派生数据用于商业销售、授权或其他商业获利目的。
-
-本仓库遵循以下处理原则：
-
-- 不上传完整 LLVIP 原始数据集。
-- 不声称 LLVIP 数据集由本项目创建。
-- 示例结果仅用于展示夜间监控图像模糊复原流程。
-- 若权利方或数据集维护者要求删除相关示例图，本仓库将及时移除。
-- 使用者若下载并使用 LLVIP，应自行确认其用途符合 LLVIP 官方许可。
-
-## LLVIP 引用格式
-
-如果你的论文、报告或代码中使用了 LLVIP 数据集，请优先引用 LLVIP 官方推荐文献：
-
-```bibtex
-@inproceedings{jia2021llvip,
-  title={LLVIP: A visible-infrared paired dataset for low-light vision},
-  author={Jia, Xinyu and Zhu, Chuang and Li, Minzhen and Tang, Wenqi and Zhou, Wenli},
-  booktitle={Proceedings of the IEEE/CVF International Conference on Computer Vision},
-  pages={3496--3504},
-  year={2021}
-}
-```
-
-也可以引用 arXiv 版本：
-
-```bibtex
-@misc{llvip_arxiv_2021,
-  title={LLVIP: A Visible-infrared Paired Dataset for Low-light Vision},
-  author={Jia, Xinyu and Zhu, Chuang and Li, Minzhen and Tang, Wenqi and Liu, Shengjie and Zhou, Wenli},
-  year={2021},
-  eprint={2108.10831},
-  archivePrefix={arXiv},
-  primaryClass={cs.CV},
-  doi={10.48550/arXiv.2108.10831},
-  url={https://arxiv.org/abs/2108.10831}
-}
 ```
 
 ## 一键运行
