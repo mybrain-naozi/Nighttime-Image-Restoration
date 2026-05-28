@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import shutil
+import time
 from typing import Sequence
 
 import cv2
@@ -10,6 +11,9 @@ import numpy as np
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
+
+plt.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "DejaVu Sans"]
+plt.rcParams["axes.unicode_minus"] = False
 
 
 def ensure_dir(path: str | Path) -> Path:
@@ -21,7 +25,11 @@ def ensure_dir(path: str | Path) -> Path:
 def reset_dir(path: str | Path) -> Path:
     path = Path(path)
     if path.exists():
-        shutil.rmtree(path)
+        try:
+            shutil.rmtree(path)
+        except PermissionError:
+            backup = path.with_name(f"{path.name}_old_{int(time.time())}")
+            path.rename(backup)
     path.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -32,7 +40,8 @@ def clip_image(image: np.ndarray) -> np.ndarray:
 
 def read_image(path: str | Path) -> np.ndarray:
     path = Path(path)
-    image = cv2.imread(str(path), cv2.IMREAD_COLOR)
+    image_data = np.fromfile(str(path), dtype=np.uint8)
+    image = cv2.imdecode(image_data, cv2.IMREAD_COLOR)
     if image is None:
         raise FileNotFoundError(f"Unable to read image: {path}")
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -47,7 +56,11 @@ def write_image(path: str | Path, image: np.ndarray) -> None:
     path = Path(path)
     ensure_dir(path.parent)
     bgr = cv2.cvtColor(to_uint8(image), cv2.COLOR_RGB2BGR)
-    cv2.imwrite(str(path), bgr)
+    suffix = path.suffix or ".png"
+    ok, encoded = cv2.imencode(suffix, bgr)
+    if not ok:
+        raise ValueError(f"Unable to encode image for writing: {path}")
+    encoded.tofile(str(path))
 
 
 def rgb_to_gray(image: np.ndarray) -> np.ndarray:
@@ -83,21 +96,38 @@ def save_comparison_figure(
     cols = min(max_cols, total)
     rows = int(np.ceil(total / cols))
 
-    fig, axes = plt.subplots(rows, cols, figsize=(4.0 * cols, 3.2 * rows))
+    fig, axes = plt.subplots(rows, cols, figsize=(4.0 * cols, 3.65 * rows))
     axes = np.array(axes, ndmin=1).reshape(rows, cols)
 
     for index, (image, title) in enumerate(zip(images, titles)):
         row = index // cols
         col = index % cols
         axes[row, col].imshow(clip_image(image))
-        axes[row, col].set_title(title, fontsize=10)
         axes[row, col].axis("off")
+        axes[row, col].text(
+            0.5,
+            -0.08,
+            title,
+            transform=axes[row, col].transAxes,
+            ha="center",
+            va="top",
+            fontsize=10,
+            linespacing=1.25,
+            clip_on=False,
+        )
 
     for index in range(total, rows * cols):
         row = index // cols
         col = index % cols
         axes[row, col].axis("off")
 
-    plt.tight_layout()
-    plt.savefig(save_path, dpi=180, bbox_inches="tight")
+    fig.subplots_adjust(
+        left=0.03,
+        right=0.97,
+        top=0.97,
+        bottom=0.10,
+        wspace=0.12,
+        hspace=0.55 if rows > 1 else 0.28,
+    )
+    plt.savefig(save_path, dpi=180, bbox_inches="tight", pad_inches=0.18)
     plt.close(fig)

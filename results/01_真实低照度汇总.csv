@@ -1,7 +1,0 @@
-﻿method,psnr,ssim,rmse
-improved,16.4464,0.6409,0.1565
-retinex_bilateral,16.1328,0.6204,0.1705
-retinex,15.8385,0.4753,0.1751
-gamma,10.0487,0.4369,0.3349
-clahe,9.3977,0.3848,0.3574
-input_low,7.7733,0.1956,0.4253

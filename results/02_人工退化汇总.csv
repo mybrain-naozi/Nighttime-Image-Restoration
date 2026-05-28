@@ -1,9 +1,0 @@
-﻿method,psnr,ssim,rmse
-improved_guided,17.7844,0.607,0.1419
-median_filter,13.4703,0.5386,0.2133
-mean_filter,13.4694,0.5382,0.2133
-gaussian_filter,13.4756,0.538,0.2132
-degraded_input,13.4568,0.4917,0.2136
-wiener_filter,13.1741,0.3171,0.2207
-cls_filter,12.3149,0.1895,0.2464
-inverse_filter,12.756,0.1717,0.2314

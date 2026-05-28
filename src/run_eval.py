@@ -5,7 +5,6 @@ from collections import OrderedDict
 from pathlib import Path
 
 import pandas as pd
-from tqdm import tqdm
 
 from src.dataset import ImagePair, limit_pairs, scan_pairs
 from src.degradation import defocus_kernel, motion_kernel, synthetic_degradation
@@ -15,19 +14,108 @@ from src.methods.deconv_filters import (
     inverse_filter,
     wiener_filter,
 )
-from src.methods.enhancement import clahe_enhance, gamma_correction, retinex_bilateral, single_scale_retinex
+from src.methods.enhancement import (
+    clahe_enhance,
+    gamma_correction,
+    retinex_bilateral,
+    single_scale_retinex,
+)
 from src.methods.improved_method import adaptive_night_restoration, guided_night_restoration
 from src.methods.spatial_filters import gaussian_filter, mean_filter, median_filter
 from src.utils import ensure_dir, read_image, reset_dir, save_comparison_figure
 
 
-def _metric_title(name: str, metrics: dict[str, float] | None) -> str:
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
+def resolve_project_path(path: str | Path) -> Path:
+    path = Path(path)
+    if path.is_absolute():
+        return path
+    return PROJECT_ROOT / path
+
+
+def display_path(path: str | Path) -> str:
+    path = Path(path)
+    try:
+        return str(path.resolve().relative_to(PROJECT_ROOT))
+    except ValueError:
+        return str(path)
+
+
+METHOD_NAMES = {
+    "input_low": "Original",
+    "gamma": "Gamma",
+    "clahe": "CLAHE",
+    "retinex": "Retinex",
+    "retinex_bilateral": "Retinex+Bilateral",
+    "improved": "Improved",
+    "degraded_input": "Degraded",
+    "mean_filter": "MeanFilter",
+    "gaussian_filter": "GaussianFilter",
+    "median_filter": "MedianFilter",
+    "inverse_filter": "InverseFilter",
+    "wiener_filter": "WienerFilter",
+    "cls_filter": "CLSFilter",
+    "improved_guided": "Improved",
+}
+
+CASE_NAMES = {
+    "motion": "MotionBlur",
+    "defocus": "DefocusBlur",
+}
+
+EXPERIMENT_NAMES = {
+    "real": "RealLowLight",
+    "synthetic": "SyntheticDegradation",
+}
+
+
+def metric_title(title: str, metrics: dict[str, float] | None) -> str:
     if metrics is None:
-        return name
-    return f"{name}\nPSNR {metrics['psnr']:.2f} | SSIM {metrics['ssim']:.3f} | RMSE {metrics['rmse']:.3f}"
+        return title
+    return f"{title}\nPSNR {metrics['psnr']:.2f} | SSIM {metrics['ssim']:.3f} | RMSE {metrics['rmse']:.3f}"
 
 
-def _save_real_visualization(
+def build_detail_table(df: pd.DataFrame) -> pd.DataFrame:
+    table = df.copy()
+    table["experiment_name"] = table["experiment"].map(EXPERIMENT_NAMES)
+    table["method_name"] = table["method_key"].map(METHOD_NAMES)
+    table["case_name"] = table["case"].fillna("").map(lambda value: CASE_NAMES.get(value, "") if value else "")
+    return table[
+        ["experiment_name", "split", "case_name", "image", "method_name", "psnr", "ssim", "rmse"]
+    ].rename(
+        columns={
+            "experiment_name": "experiment",
+            "split": "split",
+            "case_name": "case",
+            "image": "image",
+            "method_name": "method",
+            "psnr": "PSNR",
+            "ssim": "SSIM",
+            "rmse": "RMSE",
+        }
+    )
+
+
+def build_summary_table(summary_df: pd.DataFrame) -> pd.DataFrame:
+    table = summary_df.copy().reset_index()
+    table["method_name"] = table["method_key"].map(METHOD_NAMES)
+    return table[["method_name", "psnr", "ssim", "rmse"]].rename(
+        columns={"method_name": "method", "psnr": "PSNR", "ssim": "SSIM", "rmse": "RMSE"}
+    )
+
+
+def build_case_summary_table(summary_df: pd.DataFrame) -> pd.DataFrame:
+    table = summary_df.copy().reset_index()
+    table["case_name"] = table["case"].map(CASE_NAMES)
+    table["method_name"] = table["method_key"].map(METHOD_NAMES)
+    return table[["case_name", "method_name", "psnr", "ssim", "rmse"]].rename(
+        columns={"case_name": "case", "method_name": "method", "psnr": "PSNR", "ssim": "SSIM", "rmse": "RMSE"}
+    )
+
+
+def save_real_visualization(
     pair: ImagePair,
     low_image,
     gt_image,
@@ -35,16 +123,16 @@ def _save_real_visualization(
     output_dir: Path,
 ) -> None:
     images = [low_image]
-    titles = [_metric_title("Input Low", evaluate_image(low_image, gt_image))]
-    for method_name, restored in predictions.items():
+    titles = [metric_title("Original", evaluate_image(low_image, gt_image))]
+    for method_key, restored in predictions.items():
         images.append(restored)
-        titles.append(_metric_title(method_name, evaluate_image(restored, gt_image)))
+        titles.append(metric_title(METHOD_NAMES[method_key], evaluate_image(restored, gt_image)))
     images.append(gt_image)
-    titles.append("Ground Truth")
+    titles.append("GroundTruth")
     save_comparison_figure(images, titles, output_dir / f"{pair.name}.png")
 
 
-def _save_synthetic_visualization(
+def save_synthetic_visualization(
     image_name: str,
     case_name: str,
     degraded_image,
@@ -53,23 +141,18 @@ def _save_synthetic_visualization(
     output_dir: Path,
 ) -> None:
     images = [degraded_image]
-    titles = [_metric_title("Degraded Input", evaluate_image(degraded_image, gt_image))]
-    for method_name, restored in predictions.items():
+    titles = [metric_title("Degraded", evaluate_image(degraded_image, gt_image))]
+    for method_key, restored in predictions.items():
         images.append(restored)
-        titles.append(_metric_title(method_name, evaluate_image(restored, gt_image)))
+        titles.append(metric_title(METHOD_NAMES[method_key], evaluate_image(restored, gt_image)))
     images.append(gt_image)
-    titles.append("Ground Truth")
+    titles.append("GroundTruth")
     save_comparison_figure(images, titles, output_dir / f"{image_name}_{case_name}.png")
 
 
-def run_real_experiment(
-    dataset_root: Path,
-    split: str,
-    output_root: Path,
-    limit: int | None,
-) -> dict[str, object]:
+def run_real_experiment(dataset_root: Path, split: str, output_root: Path, limit: int | None) -> dict[str, Path]:
     pairs = limit_pairs(scan_pairs(dataset_root / split), limit)
-    figures_root = ensure_dir(output_root / "06_真实低照度对比图")
+    figures_dir = ensure_dir(output_root / "real_figures")
 
     methods = OrderedDict(
         [
@@ -82,72 +165,57 @@ def run_real_experiment(
     )
 
     records: list[dict[str, object]] = []
-
-    for pair in tqdm(pairs, desc=f"Real low-light ({split})"):
+    for pair in pairs:
         low_image = read_image(pair.low_path)
         gt_image = read_image(pair.high_path)
 
         predictions: OrderedDict[str, object] = OrderedDict()
-        low_metrics = evaluate_image(low_image, gt_image)
         records.append(
             {
                 "experiment": "real",
                 "split": split,
+                "case": "",
                 "image": pair.name,
-                "method": "input_low",
-                **low_metrics,
+                "method_key": "input_low",
+                **evaluate_image(low_image, gt_image),
             }
         )
 
-        for method_name, method in methods.items():
+        for method_key, method in methods.items():
             restored = method(low_image)
-            predictions[method_name] = restored
-            metrics = evaluate_image(restored, gt_image)
+            predictions[method_key] = restored
             records.append(
                 {
                     "experiment": "real",
                     "split": split,
+                    "case": "",
                     "image": pair.name,
-                    "method": method_name,
-                    **metrics,
+                    "method_key": method_key,
+                    **evaluate_image(restored, gt_image),
                 }
             )
 
-        _save_real_visualization(pair, low_image, gt_image, predictions, figures_root)
+        save_real_visualization(pair, low_image, gt_image, predictions, figures_dir)
 
     df = pd.DataFrame(records)
-    details_path = output_root / "04_真实低照度逐图结果.csv"
-    summary_path = output_root / "01_真实低照度汇总.csv"
-    df.to_csv(details_path, index=False, encoding="utf-8-sig")
+    detail_path = output_root / "real_details.csv"
+    summary_path = output_root / "real_summary.csv"
+    build_detail_table(df).to_csv(detail_path, index=False, encoding="utf-8-sig")
+
     summary = (
-        df.groupby("method")[["psnr", "ssim", "rmse"]]
+        df.groupby("method_key")[["psnr", "ssim", "rmse"]]
         .mean()
         .sort_values(by=["ssim", "psnr"], ascending=[False, False])
         .round(4)
     )
-    summary.to_csv(summary_path, encoding="utf-8-sig")
-    return {
-        "summary_path": summary_path,
-        "details_path": details_path,
-        "figures_dir": figures_root,
-        "best_method": str(summary.index[0]),
-        "best_psnr": float(summary.iloc[0]["psnr"]),
-        "best_ssim": float(summary.iloc[0]["ssim"]),
-        "best_rmse": float(summary.iloc[0]["rmse"]),
-        "figure_count": len(pairs),
-    }
+    build_summary_table(summary).to_csv(summary_path, index=False, encoding="utf-8-sig")
+    return {"summary_path": summary_path, "figures_dir": figures_dir}
 
 
-def run_synthetic_experiment(
-    dataset_root: Path,
-    split: str,
-    output_root: Path,
-    limit: int | None,
-) -> dict[str, object]:
+def run_synthetic_experiment(dataset_root: Path, split: str, output_root: Path, limit: int | None) -> dict[str, Path]:
     pairs = limit_pairs(scan_pairs(dataset_root / split), limit)
-    figures_root = ensure_dir(output_root / "07_人工退化对比图")
-
-    synthetic_cases = [
+    figures_dir = ensure_dir(output_root / "synthetic_figures")
+    cases = [
         {
             "name": "motion",
             "kernel": motion_kernel(length=21, angle=20.0),
@@ -167,11 +235,9 @@ def run_synthetic_experiment(
     ]
 
     records: list[dict[str, object]] = []
-
-    for pair in tqdm(pairs, desc=f"Synthetic restoration ({split})"):
+    for pair in pairs:
         gt_image = read_image(pair.high_path)
-
-        for case in synthetic_cases:
+        for case in cases:
             degraded_image = synthetic_degradation(
                 gt_image,
                 kernel=case["kernel"],
@@ -180,17 +246,15 @@ def run_synthetic_experiment(
                 gamma=case["gamma"],
                 gain=case["gain"],
             )
-            case_name = case["name"]
 
-            degraded_metrics = evaluate_image(degraded_image, gt_image)
             records.append(
                 {
                     "experiment": "synthetic",
                     "split": split,
-                    "case": case_name,
+                    "case": case["name"],
                     "image": pair.name,
-                    "method": "degraded_input",
-                    **degraded_metrics,
+                    "method_key": "degraded_input",
+                    **evaluate_image(degraded_image, gt_image),
                 }
             )
 
@@ -209,189 +273,84 @@ def run_synthetic_experiment(
                             gamma=0.0025,
                         ),
                     ),
-                    (
-                        "improved_guided",
-                        lambda image, kernel=case["kernel"]: guided_night_restoration(image, kernel),
-                    ),
+                    ("improved_guided", lambda image, kernel=case["kernel"]: guided_night_restoration(image, kernel)),
                 ]
             )
 
             predictions: OrderedDict[str, object] = OrderedDict()
-            for method_name, method in methods.items():
+            for method_key, method in methods.items():
                 restored = method(degraded_image)
-                predictions[method_name] = restored
-                metrics = evaluate_image(restored, gt_image)
+                predictions[method_key] = restored
                 records.append(
                     {
                         "experiment": "synthetic",
                         "split": split,
-                        "case": case_name,
+                        "case": case["name"],
                         "image": pair.name,
-                        "method": method_name,
-                        **metrics,
+                        "method_key": method_key,
+                        **evaluate_image(restored, gt_image),
                     }
                 )
 
-            _save_synthetic_visualization(pair.name, case_name, degraded_image, gt_image, predictions, figures_root)
+            save_synthetic_visualization(pair.name, case["name"], degraded_image, gt_image, predictions, figures_dir)
 
     df = pd.DataFrame(records)
-    details_path = output_root / "05_人工退化逐图结果.csv"
-    summary_by_case_path = output_root / "03_人工退化分类汇总.csv"
-    summary_overall_path = output_root / "02_人工退化汇总.csv"
-    df.to_csv(details_path, index=False, encoding="utf-8-sig")
+    detail_path = output_root / "synthetic_details.csv"
+    case_summary_path = output_root / "synthetic_case_summary.csv"
+    summary_path = output_root / "synthetic_summary.csv"
+    build_detail_table(df).to_csv(detail_path, index=False, encoding="utf-8-sig")
 
-    summary_by_case = (
-        df.groupby(["case", "method"])[["psnr", "ssim", "rmse"]]
+    case_summary = (
+        df.groupby(["case", "method_key"])[["psnr", "ssim", "rmse"]]
         .mean()
         .sort_values(by=["case", "ssim", "psnr"], ascending=[True, False, False])
         .round(4)
     )
-    summary_by_case.to_csv(summary_by_case_path, encoding="utf-8-sig")
+    build_case_summary_table(case_summary).to_csv(case_summary_path, index=False, encoding="utf-8-sig")
 
-    summary_overall = (
-        df.groupby("method")[["psnr", "ssim", "rmse"]]
+    summary = (
+        df.groupby("method_key")[["psnr", "ssim", "rmse"]]
         .mean()
         .sort_values(by=["ssim", "psnr"], ascending=[False, False])
         .round(4)
     )
-    summary_overall.to_csv(summary_overall_path, encoding="utf-8-sig")
+    build_summary_table(summary).to_csv(summary_path, index=False, encoding="utf-8-sig")
     return {
-        "summary_path": summary_overall_path,
-        "summary_by_case_path": summary_by_case_path,
-        "details_path": details_path,
-        "figures_dir": figures_root,
-        "best_method": str(summary_overall.index[0]),
-        "best_psnr": float(summary_overall.iloc[0]["psnr"]),
-        "best_ssim": float(summary_overall.iloc[0]["ssim"]),
-        "best_rmse": float(summary_overall.iloc[0]["rmse"]),
-        "figure_count": len(pairs) * len(synthetic_cases),
+        "summary_path": summary_path,
+        "case_summary_path": case_summary_path,
+        "figures_dir": figures_dir,
     }
 
 
-def write_simple_guide(
-    output_root: Path,
-    split: str,
-    mode: str,
-    real_report: dict[str, object] | None,
-    synthetic_report: dict[str, object] | None,
-) -> None:
-    lines = [
-        "先看这个文件",
-        "",
-        "建议按下面顺序看结果：",
-        "1. 先看这个文件，知道结果分别放在哪。",
-    ]
-
-    if real_report is not None:
-        lines.extend(
-            [
-                "2. 看 01_真实低照度汇总.csv。",
-                "3. 看 06_真实低照度对比图 文件夹里的图片。",
-                "",
-                "真实低照度实验：",
-                f"- 最优方法：{real_report['best_method']}",
-                f"- 平均指标：PSNR={real_report['best_psnr']:.4f}，SSIM={real_report['best_ssim']:.4f}，RMSE={real_report['best_rmse']:.4f}",
-                f"- 对比图数量：{real_report['figure_count']}",
-            ]
-        )
-
-    if synthetic_report is not None:
-        lines.extend(
-            [
-                "",
-                "人工退化复原实验：",
-                "4. 看 02_人工退化汇总.csv。",
-                "5. 如果想分开看运动模糊和散焦模糊，再看 03_人工退化分类汇总.csv。",
-                "6. 看 07_人工退化对比图 文件夹里的图片。",
-                f"- 最优方法：{synthetic_report['best_method']}",
-                f"- 平均指标：PSNR={synthetic_report['best_psnr']:.4f}，SSIM={synthetic_report['best_ssim']:.4f}，RMSE={synthetic_report['best_rmse']:.4f}",
-                f"- 对比图数量：{synthetic_report['figure_count']}",
-            ]
-        )
-
-    lines.extend(
-        [
-            "",
-            "如果你只想看最终结论：",
-            "- 直接看 01_真实低照度汇总.csv 和 02_人工退化汇总.csv。",
-            "如果你想看图片效果：",
-            "- 直接看 06_真实低照度对比图 和 07_人工退化对比图。",
-            "04_真实低照度逐图结果.csv 和 05_人工退化逐图结果.csv 是详细明细，后面写论文时再看就行。",
-            "",
-            f"本次运行模式：{mode}",
-            f"本次使用数据集：{split}",
-        ]
-    )
-
-    guide_path = output_root / "00_先看这个.txt"
-    guide_path.write_text("\n".join(lines), encoding="utf-8-sig")
-
-
-def print_run_summary(
-    output_root: Path,
-    real_report: dict[str, object] | None,
-    synthetic_report: dict[str, object] | None,
-) -> None:
-    print("\n运行完成。")
-    print(f"结果目录：{output_root.resolve()}")
-    print(f"先看这里：{(output_root / '00_先看这个.txt').resolve()}")
-    if real_report is not None:
-        print(f"真实低照度汇总：{real_report['summary_path'].resolve()}")
-        print(f"真实低照度对比图：{real_report['figures_dir'].resolve()}")
-    if synthetic_report is not None:
-        print(f"人工退化汇总：{synthetic_report['summary_path'].resolve()}")
-        print(f"人工退化分类汇总：{synthetic_report['summary_by_case_path'].resolve()}")
-        print(f"人工退化对比图：{synthetic_report['figures_dir'].resolve()}")
-
-
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Night image restoration experiments")
-    parser.add_argument(
-        "--data-root",
-        type=Path,
-        default=Path("."),
-        help="Project root that contains our485/ and eval15/",
-    )
-    parser.add_argument(
-        "--split",
-        type=str,
-        default="eval15",
-        choices=["our485", "eval15"],
-        help="Dataset split to evaluate.",
-    )
-    parser.add_argument(
-        "--mode",
-        type=str,
-        default="all",
-        choices=["all", "real", "synthetic"],
-        help="Which experiment branch to run.",
-    )
-    parser.add_argument(
-        "--output-root",
-        type=Path,
-        default=Path("results"),
-        help="Where to save metrics, restored images, and figures.",
-    )
-    parser.add_argument(
-        "--limit",
-        type=int,
-        default=None,
-        help="Optional number of image pairs to process.",
-    )
+    parser = argparse.ArgumentParser(description="Run low-light experiments")
+    parser.add_argument("--data-root", type=Path, default=PROJECT_ROOT, help="Data root")
+    parser.add_argument("--split", type=str, default="eval15", choices=["our485", "eval15"], help="Dataset split")
+    parser.add_argument("--mode", type=str, default="all", choices=["all", "real", "synthetic"], help="Run mode")
+    parser.add_argument("--output-root", type=Path, default=PROJECT_ROOT / "results", help="Output folder")
+    parser.add_argument("--limit", type=int, default=None, help="Limit number of images")
     return parser
 
 
 def main() -> None:
     args = build_parser().parse_args()
-    output_root = reset_dir(args.output_root)
+    data_root = resolve_project_path(args.data_root)
+    output_root = reset_dir(resolve_project_path(args.output_root))
     real_report = None
     synthetic_report = None
+
     if args.mode in {"all", "real"}:
-        real_report = run_real_experiment(args.data_root, args.split, output_root, args.limit)
+        real_report = run_real_experiment(data_root, args.split, output_root, args.limit)
     if args.mode in {"all", "synthetic"}:
-        synthetic_report = run_synthetic_experiment(args.data_root, args.split, output_root, args.limit)
-    write_simple_guide(output_root, args.split, args.mode, real_report, synthetic_report)
-    print_run_summary(output_root, real_report, synthetic_report)
+        synthetic_report = run_synthetic_experiment(data_root, args.split, output_root, args.limit)
+
+    print(f"result_path: {display_path(output_root)}")
+    if real_report is not None:
+        print(f"real_summary: {display_path(real_report['summary_path'])}")
+        print(f"real_figures: {display_path(real_report['figures_dir'])}")
+    if synthetic_report is not None:
+        print(f"synthetic_summary: {display_path(synthetic_report['summary_path'])}")
+        print(f"synthetic_figures: {display_path(synthetic_report['figures_dir'])}")
 
 
 if __name__ == "__main__":
