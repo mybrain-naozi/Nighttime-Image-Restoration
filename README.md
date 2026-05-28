@@ -142,36 +142,11 @@ pip install -r requirements.txt
 
 如果你想在另一台电脑上复刻本项目，按下面流程做即可：
 
-```mermaid
-flowchart TD
-    A[下载或克隆本仓库] --> B[创建 Python 虚拟环境]
-    B --> C[安装 requirements.txt 依赖]
-    C --> D[下载 LLVIP 数据集]
-    D --> E[把 visible 图像放到 LLVIP/LLVIP/visible]
-    E --> F{路径是否一致}
-    F -- 一致 --> G[运行 python run_surveillance_pipeline.py --limit 5]
-    F -- 不一致 --> H[修改 src/path_config.py 中的 LLVIP_VISIBLE_DIR]
-    H --> G
-    G --> I[生成 surveillance_samples]
-    I --> J[生成 surveillance_results]
-    J --> K[查看 traditional / improved / comparison / improved_best20]
-    K --> L[查看 CSV 指标表并用于论文或答辩]
-```
+![复刻项目流程图](docs/assets/workflow_reproduce_cn.png)
 
 实验内部处理流程如下：
 
-```mermaid
-flowchart LR
-    A[LLVIP 原始夜间监控图] --> B1[运动模糊退化图]
-    A --> B2[散焦模糊退化图]
-    B1 --> C1[传统复原方法]
-    B2 --> C1
-    B1 --> C2[改进复原方法]
-    B2 --> C2
-    C1 --> D[PSNR / SSIM / RMSE 评价]
-    C2 --> D
-    D --> E[生成对比图和指标表]
-```
+![夜间监控图像复原实验流程图](docs/assets/workflow_experiment_cn.png)
 
 ## 一键运行
 
