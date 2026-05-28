@@ -138,6 +138,41 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
+## 复刻项目流程图
+
+如果你想在另一台电脑上复刻本项目，按下面流程做即可：
+
+```mermaid
+flowchart TD
+    A[下载或克隆本仓库] --> B[创建 Python 虚拟环境]
+    B --> C[安装 requirements.txt 依赖]
+    C --> D[下载 LLVIP 数据集]
+    D --> E[把 visible 图像放到 LLVIP/LLVIP/visible]
+    E --> F{路径是否一致}
+    F -- 一致 --> G[运行 python run_surveillance_pipeline.py --limit 5]
+    F -- 不一致 --> H[修改 src/path_config.py 中的 LLVIP_VISIBLE_DIR]
+    H --> G
+    G --> I[生成 surveillance_samples]
+    I --> J[生成 surveillance_results]
+    J --> K[查看 traditional / improved / comparison / improved_best20]
+    K --> L[查看 CSV 指标表并用于论文或答辩]
+```
+
+实验内部处理流程如下：
+
+```mermaid
+flowchart LR
+    A[LLVIP 原始夜间监控图] --> B1[运动模糊退化图]
+    A --> B2[散焦模糊退化图]
+    B1 --> C1[传统复原方法]
+    B2 --> C1
+    B1 --> C2[改进复原方法]
+    B2 --> C2
+    C1 --> D[PSNR / SSIM / RMSE 评价]
+    C2 --> D
+    D --> E[生成对比图和指标表]
+```
+
 ## 一键运行
 
 推荐直接运行：
@@ -161,6 +196,40 @@ traditional_path: surveillance_results/traditional
 improved_path: surveillance_results/improved
 ```
 
+## 示例结果与指标对比
+
+下面是仓库中保留的一张示例对比图，用于快速查看退化图、传统方法、改进方法和原图之间的差别：
+
+![夜间监控图像复原对比图](examples/results/comparison/190002_comparison.png)
+
+改进最明显的示例结果可以查看 `examples/results/improved_best20/`。其中第一张示例如下：
+
+![改进效果较明显的示例](examples/results/improved_best20/01_190005_motion_blur_GAIN_5.39_SSIM_GAIN_0.116.png)
+
+5 张示例样本的整体平均指标如下：
+
+| 方法 | PSNR | SSIM | RMSE |
+|---|---:|---:|---:|
+| 改进复原 | 29.0153 | 0.8443 | 0.0357 |
+| 维纳滤波 | 24.2545 | 0.7345 | 0.0613 |
+| 逆滤波 | 23.1702 | 0.7161 | 0.0695 |
+| 约束最小二乘 | 14.9024 | 0.2531 | 0.1860 |
+
+按退化类型统计的平均指标如下：
+
+| 退化类型 | 方法 | PSNR | SSIM | RMSE |
+|---|---|---:|---:|---:|
+| 运动模糊 | 改进复原 | 29.8771 | 0.8701 | 0.0322 |
+| 运动模糊 | 维纳滤波 | 23.9892 | 0.7332 | 0.0632 |
+| 运动模糊 | 逆滤波 | 23.0011 | 0.7106 | 0.0708 |
+| 运动模糊 | 约束最小二乘 | 12.8292 | 0.1603 | 0.2301 |
+| 散焦模糊 | 改进复原 | 28.1535 | 0.8185 | 0.0393 |
+| 散焦模糊 | 维纳滤波 | 24.5198 | 0.7358 | 0.0595 |
+| 散焦模糊 | 逆滤波 | 23.3394 | 0.7215 | 0.0681 |
+| 散焦模糊 | 约束最小二乘 | 16.9755 | 0.3459 | 0.1419 |
+
+从表格可以看出，改进复原方法在运动模糊和散焦模糊两类退化下都取得了更高的 PSNR、SSIM 和更低的 RMSE，说明它不仅在单张图上视觉效果更好，在平均指标上也优于传统滤波方法。
+
 ## 结果文件说明
 
 运行后会生成 `surveillance_results` 文件夹，主要内容如下：
@@ -175,15 +244,6 @@ surveillance_results/
 ├── surveillance_case_summary.csv # 不同退化类型下的平均指标
 └── surveillance_details.csv      # 每张图片的详细指标
 ```
-
-示例结果中，5 张样本的平均指标如下：
-
-| 方法 | PSNR | SSIM | RMSE |
-|---|---:|---:|---:|
-| 改进复原 | 29.0153 | 0.8443 | 0.0357 |
-| 维纳滤波 | 24.2545 | 0.7345 | 0.0613 |
-| 逆滤波 | 23.1702 | 0.7161 | 0.0695 |
-| 约束最小二乘 | 14.9024 | 0.2531 | 0.1860 |
 
 ## 方法说明
 
