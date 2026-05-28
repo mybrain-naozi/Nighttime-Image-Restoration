@@ -140,13 +140,86 @@ pip install -r requirements.txt
 
 ## 复刻项目流程图
 
-如果你想在另一台电脑上复刻本项目，按下面流程做即可：
+如果想在另一台电脑上复刻本项目，核心步骤如下：
 
-![复刻项目流程图](docs/assets/workflow_reproduce_cn.png)
+```text
+Nighttime-Image-Restoration/
+|
+|-- 1. 下载项目
+|   `-- git clone 或直接下载 ZIP
+|
+|-- 2. 安装环境
+|   |-- python -m venv .venv
+|   |-- .\.venv\Scripts\activate
+|   `-- pip install -r requirements.txt
+|
+|-- 3. 下载 LLVIP 数据集
+|   `-- 只需要 visible 可见光图像
+|
+|-- 4. 放置数据集
+|   `-- LLVIP/
+|       `-- LLVIP/
+|           `-- visible/
+|               |-- 190001.jpg
+|               |-- 190002.jpg
+|               `-- ...
+|
+|-- 5. 检查路径
+|   `-- src/path_config.py
+|       `-- LLVIP_VISIBLE_DIR = PROJECT_ROOT / "LLVIP" / "LLVIP" / "visible"
+|
+|-- 6. 一键运行
+|   `-- python run_surveillance_pipeline.py --limit 5
+|
+|-- 7. 查看结果
+|   `-- surveillance_results/
+|       |-- traditional/          传统方法结果
+|       |-- improved/             改进方法结果
+|       |-- comparison/           对比图
+|       |-- improved_best20/      改进最明显结果
+|       |-- surveillance_summary.csv
+|       |-- surveillance_case_summary.csv
+|       `-- surveillance_details.csv
+|
+`-- 8. 用于论文或答辩
+    |-- 对比图
+    |-- PSNR / SSIM / RMSE 指标表
+    `-- 结果分析与结论
+```
 
 实验内部处理流程如下：
 
-![夜间监控图像复原实验流程图](docs/assets/workflow_experiment_cn.png)
+```text
+LLVIP 原始夜间监控图
+|
+|-- 运动模糊退化
+|   |-- 传统复原
+|   |   |-- 逆滤波
+|   |   |-- 维纳滤波
+|   |   `-- 约束最小二乘滤波
+|   `-- 改进复原
+|       |-- 反卷积去模糊
+|       |-- 边缘加权融合
+|       |-- 双边降噪
+|       `-- 细节锐化
+|
+|-- 散焦模糊退化
+|   |-- 传统复原
+|   |   |-- 逆滤波
+|   |   |-- 维纳滤波
+|   |   `-- 约束最小二乘滤波
+|   `-- 改进复原
+|       |-- 反卷积去模糊
+|       |-- 边缘加权融合
+|       |-- 双边降噪
+|       `-- 细节锐化
+|
+`-- 质量评价
+    |-- PSNR
+    |-- SSIM
+    |-- RMSE
+    `-- 生成对比图与 CSV 指标表
+```
 
 ## 一键运行
 
